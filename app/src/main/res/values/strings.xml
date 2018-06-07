@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MapBox-Test</string>
+    <string name="key_map">pk.eyJ1IjoiYWd1bmdudXJzYXRyaWEiLCJhIjoiY2ppNDVnMTlxMDVydzN3cDZ2cWpmaTA5YyJ9.oxpJznmSB1c6wXWzlofFGA</string>
+    <string name="start_navigation">Start Navigation</string>
+</resources>
