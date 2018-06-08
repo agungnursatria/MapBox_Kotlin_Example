@@ -45,6 +45,8 @@ dependencies {
     implementation ('com.mapbox.mapboxsdk:mapbox-android-navigation-ui:0.13.0') {
         transitive = true
     }
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-plugin-places:0.4.0'
+
     implementation 'com.squareup.retrofit2:retrofit:2.4.0'
 
 }

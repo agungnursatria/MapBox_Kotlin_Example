@@ -10,6 +10,7 @@ import android.location.Location
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import com.mapbox.android.core.location.LocationEngine
 import com.mapbox.android.core.location.LocationEngineListener
@@ -40,9 +41,9 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsListener {
+class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsListener, View.OnClickListener {
 
-    private val TAG = "Debuging1"
+    private val TAG = "MainActivity"
     private val REQUEST_CODE_AUTOCOMPLETE = 1
 
     private lateinit var permissionsManager: PermissionsManager
@@ -71,45 +72,69 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
                 originCoord = LatLng(originLocation?.latitude!!, originLocation?.longitude!!)
                 mapboxMap.addOnMapClickListener {
-                    onMapClick(it)
+                    val markerOption = MarkerOptions().position(it)
+                    initMarker(markerOption)
                 }
+
+                btnFindPlace.setOnClickListener(this@MainActivity)
+                btnStartNavigation.setOnClickListener(this@MainActivity)
             })
-        }
-
-        btnStartNavigation.setOnClickListener {
-
-            val option = NavigationLauncherOptions.builder()
-                    .origin(originPosition)
-                    .destination(destinationPosition)
-                    .build()
-
-            NavigationLauncher.startNavigation(this@MainActivity, option)
-        }
-
-        btnFindPlace.setOnClickListener {
-            val intent = PlaceAutocomplete.IntentBuilder()
-                    .accessToken(Mapbox.getAccessToken())
-                    .placeOptions(
-                            PlaceOptions.builder()
-                                    .backgroundColor(Color.parseColor("#EEEEEE"))
-                                    .limit(10)
-                                    .hint("Places")
-                                    .geocodingTypes(GeocodingCriteria.TYPE_PLACE)
-                                    .build(PlaceOptions.MODE_CARDS))
-                    .build(this@MainActivity)
-            startActivityForResult(intent, REQUEST_CODE_AUTOCOMPLETE)
         }
     }
 
+    override fun onClick(v: View?) {
+        when(v?.id){
+            R.id.btnFindPlace -> {
+                val intent = PlaceAutocomplete.IntentBuilder()
+                        .accessToken(Mapbox.getAccessToken())
+                        .placeOptions(
+                                PlaceOptions.builder()
+                                        .backgroundColor(Color.parseColor("#EEEEEE"))
+                                        .limit(10)
+                                        .hint("Places")
+                                        .geocodingTypes(GeocodingCriteria.TYPE_PLACE)
+                                        .build(PlaceOptions.MODE_CARDS))
+                        .build(this@MainActivity)
+                startActivityForResult(intent, REQUEST_CODE_AUTOCOMPLETE)
+            }
+            R.id.btnStartNavigation ->{
+                val option = NavigationLauncherOptions.builder()
+                        .origin(originPosition)
+                        .destination(destinationPosition)
+                        .directionsProfile("driving-traffic")
+                        .enableOffRouteDetection(true)
+                        .build()
+
+                NavigationLauncher.startNavigation(this@MainActivity, option)
+            }
+        }
+
+    }
+
     private fun getRoute(origin: Point, destination: Point) {
+        // Profile:
+        //     driving-traffic
+        //          for automotive routing. This profile factors in current and historic traffic conditions to avoid slowdowns. Traffic is available in these supported geographies.
+        //
+        //     driving
+        //          for automotive routing. This profile shows the fastest routes by preferring high-speed roads, like highways.
+        //
+        //     walking
+        //          for pedestrian and hiking routing. This profile shows the shortest path by using sidewalks and trails.
+        //
+        //     cycling
+        //          for bicycle routing. This profile shows routes that are short and safer for cyclists by avoiding highways and preferring streets with bike lanes.
+        //
+
         NavigationRoute.builder()
                 .accessToken(Mapbox.getAccessToken())
                 .origin(origin)
                 .destination(destination)
+                .profile("driving-traffic")
                 .build()
                 .getRoute(object : Callback<DirectionsResponse> {
                     override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                        // You can get the generic HTTP info about the response
+                        // Log.d(TAG, call.request().url().uri().toString())
                         if (response.body() == null) {
                             Log.e(TAG, "No routes found, make sure you set the right user and access token.")
                             return
@@ -118,7 +143,6 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                             return
                         }
 
-                        // Mencari jarak terbaik dengan metode KNN, diambil [0] sebagai terbaik
                         val currentRoute = response.body()!!.routes()[0]
 
                         // Draw the route on the map
@@ -132,18 +156,18 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
                     override fun onFailure(call: Call<DirectionsResponse>, throwable: Throwable) {
                         Log.e(TAG, "Error: " + throwable.message)
+                        Log.d(TAG, call.request().url().uri().toString())
                     }
                 })
     }
 
-    private fun onMapClick(destinationCoord: LatLng) {
+    private fun initMarker(markerOptions: MarkerOptions) {
         if (destinationMarker != null)
             mapboxMap.removeMarker(destinationMarker!!)
 
-        destinationMarker = mapboxMap.addMarker(MarkerOptions()
-                .position(destinationCoord))
+        destinationMarker = mapboxMap.addMarker(markerOptions)
 
-        destinationPosition = Point.fromLngLat(destinationCoord.longitude, destinationCoord.latitude)
+        destinationPosition = Point.fromLngLat(markerOptions.position.longitude, markerOptions.position.latitude)
         originPosition = Point.fromLngLat(originCoord!!.longitude, originCoord!!.latitude)
         getRoute(originPosition!!, destinationPosition!!)
 
@@ -183,7 +207,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
     private fun setCameraPosition(location: Location) {
         mapboxMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
                 LatLng(location.latitude, location.longitude),
-                14.0
+                17.0
         ))
     }
 
@@ -277,21 +301,12 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
             val coordinate = LatLng(point!!.latitude(), point.longitude())
 
-            if (destinationMarker != null)
-                mapboxMap.removeMarker(destinationMarker!!)
-
-            destinationMarker = mapboxMap.addMarker(MarkerOptions()
+            val markerOptions = MarkerOptions()
                     .position(coordinate)
                     .title(placeName)
-                    .snippet(address))
+                    .snippet(address)
 
-            destinationPosition = Point.fromLngLat(coordinate.longitude, coordinate.latitude)
-            originPosition = Point.fromLngLat(originCoord!!.longitude, originCoord!!.latitude)
-            getRoute(originPosition!!, destinationPosition!!)
-
-            if (!btnStartNavigation.isEnabled)
-                btnStartNavigation.isEnabled = true
-
+            initMarker(markerOptions)
             moveCamera(coordinate)
         }
     }
