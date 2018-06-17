@@ -20,6 +20,8 @@ import com.mapbox.android.core.permissions.PermissionsListener
 import com.mapbox.android.core.permissions.PermissionsManager
 import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.geocoding.v5.GeocodingCriteria
+import com.mapbox.api.geocoding.v5.MapboxGeocoding
+import com.mapbox.api.geocoding.v5.models.GeocodingResponse
 import com.mapbox.geojson.Point
 import com.mapbox.mapboxsdk.Mapbox
 import com.mapbox.mapboxsdk.annotations.Marker
@@ -43,7 +45,7 @@ import retrofit2.Response
 
 class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsListener, View.OnClickListener {
 
-    private val TAG = "MainActivity"
+    private val TAG = "BUGG"
     private val REQUEST_CODE_AUTOCOMPLETE = 1
 
     private lateinit var permissionsManager: PermissionsManager
@@ -72,8 +74,41 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
                 originCoord = LatLng(originLocation?.latitude!!, originLocation?.longitude!!)
                 mapboxMap.addOnMapClickListener {
-                    val markerOption = MarkerOptions().position(it)
-                    initMarker(markerOption)
+
+                    val point: Point = Point.fromLngLat(it.longitude, it.latitude)
+
+                    MapboxGeocoding.builder()
+                            .accessToken(Mapbox.getAccessToken())
+                            .mode("mapbox.places")
+                            .geocodingTypes(GeocodingCriteria.TYPE_POI)
+                            .query(point)
+                            .build()
+                            .enqueueCall(object : Callback<GeocodingResponse> {
+                                override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
+                                    // Log.d(TAG, call.request().url().uri().toString())
+                                    // Log.d(TAG, response.body()?.toJson())
+                                    val features = response.body()?.features()!!
+                                    val selectedPlace = if (features.isNotEmpty()) features.get(0) else null
+
+                                    val markerOption = MarkerOptions()
+                                            .position(it)
+
+                                    if (selectedPlace != null){
+                                        // Log.d(TAG, "NOT NULL")
+                                        val placeName = selectedPlace.placeName()
+                                        val address = selectedPlace.address()
+                                        markerOption.title(placeName)
+                                                .snippet(address)
+                                    }
+
+                                    initMarker(markerOption)
+                                }
+
+                                override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) {
+                                    Log.e(TAG, "Error: " + t.message)
+                                    // Log.d(TAG, call.request().url().uri().toString())
+                                }
+                            })
                 }
 
                 btnFindPlace.setOnClickListener(this@MainActivity)
@@ -83,7 +118,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
     }
 
     override fun onClick(v: View?) {
-        when(v?.id){
+        when (v?.id) {
             R.id.btnFindPlace -> {
                 val intent = PlaceAutocomplete.IntentBuilder()
                         .accessToken(Mapbox.getAccessToken())
@@ -91,13 +126,13 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                                 PlaceOptions.builder()
                                         .backgroundColor(Color.parseColor("#EEEEEE"))
                                         .limit(10)
-                                        .hint("Places")
-                                        .geocodingTypes(GeocodingCriteria.TYPE_PLACE)
+                                        .hint("Places of Interest")
+                                        .geocodingTypes(GeocodingCriteria.TYPE_POI)
                                         .build(PlaceOptions.MODE_CARDS))
                         .build(this@MainActivity)
                 startActivityForResult(intent, REQUEST_CODE_AUTOCOMPLETE)
             }
-            R.id.btnStartNavigation ->{
+            R.id.btnStartNavigation -> {
                 val option = NavigationLauncherOptions.builder()
                         .origin(originPosition)
                         .destination(destinationPosition)
@@ -138,8 +173,9 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                         if (response.body() == null) {
                             Log.e(TAG, "No routes found, make sure you set the right user and access token.")
                             return
-                        } else if (response.body()!!.routes().size < 1) {
+                        } else if (response.body()!!.routes().isEmpty()) {
                             Log.e(TAG, "No routes found")
+                            Toast.makeText(this, "No routes found", Toast.LENGTH_SHORT)
                             return
                         }
 
@@ -156,7 +192,6 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
                     override fun onFailure(call: Call<DirectionsResponse>, throwable: Throwable) {
                         Log.e(TAG, "Error: " + throwable.message)
-                        Log.d(TAG, call.request().url().uri().toString())
                     }
                 })
     }
@@ -211,7 +246,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         ))
     }
 
-    private fun moveCamera(coordinate: LatLng){
+    private fun moveCamera(coordinate: LatLng) {
         val newCameraPosition = CameraPosition.Builder()
                 .target(coordinate)
                 .zoom(14.0)
@@ -310,4 +345,21 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
             moveCamera(coordinate)
         }
     }
+
+    override fun onBackPressed() {
+        if (destinationMarker != null){
+            mapboxMap.removeMarker(destinationMarker!!)
+            if (navigationMapRoute != null) {
+                navigationMapRoute!!.removeRoute()
+            }
+            destinationMarker = null
+            Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT)
+        }
+        else {
+            super.onBackPressed()
+            this.finish()
+        }
+    }
+
+
 }
