@@ -10,6 +10,8 @@ import android.location.Location
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
 import com.mapbox.android.core.location.LocationEngine
@@ -47,6 +49,8 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
     private val TAG = "BUGG"
     private val REQUEST_CODE_AUTOCOMPLETE = 1
+    private var transport = "driving-traffic"
+    private lateinit var menuView: Menu
 
     private lateinit var permissionsManager: PermissionsManager
     private lateinit var mapboxMap: MapboxMap
@@ -65,6 +69,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        setTitle("")
         Mapbox.getInstance(this, getString(R.string.key_map))
         mapView.apply {
             onCreate(savedInstanceState)
@@ -74,41 +79,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
                 originCoord = LatLng(originLocation?.latitude!!, originLocation?.longitude!!)
                 mapboxMap.addOnMapClickListener {
-
-                    val point: Point = Point.fromLngLat(it.longitude, it.latitude)
-
-                    MapboxGeocoding.builder()
-                            .accessToken(Mapbox.getAccessToken())
-                            .mode("mapbox.places")
-                            .geocodingTypes(GeocodingCriteria.TYPE_POI)
-                            .query(point)
-                            .build()
-                            .enqueueCall(object : Callback<GeocodingResponse> {
-                                override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
-                                    // Log.d(TAG, call.request().url().uri().toString())
-                                    // Log.d(TAG, response.body()?.toJson())
-                                    val features = response.body()?.features()!!
-                                    val selectedPlace = if (features.isNotEmpty()) features.get(0) else null
-
-                                    val markerOption = MarkerOptions()
-                                            .position(it)
-
-                                    if (selectedPlace != null){
-                                        // Log.d(TAG, "NOT NULL")
-                                        val placeName = selectedPlace.placeName()
-                                        val address = selectedPlace.address()
-                                        markerOption.title(placeName)
-                                                .snippet(address)
-                                    }
-
-                                    initMarker(markerOption)
-                                }
-
-                                override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) {
-                                    Log.e(TAG, "Error: " + t.message)
-                                    // Log.d(TAG, call.request().url().uri().toString())
-                                }
-                            })
+                    reverseGeocodingMarker(it)
                 }
 
                 btnFindPlace.setOnClickListener(this@MainActivity)
@@ -146,6 +117,42 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
     }
 
+    private fun reverseGeocodingMarker(latLng: LatLng) {
+
+        val point: Point = Point.fromLngLat(latLng.longitude, latLng.latitude)
+        MapboxGeocoding.builder()
+                .accessToken(Mapbox.getAccessToken())
+                .mode("mapbox.places")
+                .geocodingTypes(GeocodingCriteria.TYPE_POI)
+                .query(point)
+                .build()
+                .enqueueCall(object : Callback<GeocodingResponse> {
+                    override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
+                        // Log.d(TAG, call.request().url().uri().toString())
+                        // Log.d(TAG, response.body()?.toJson())
+                        val features = response.body()?.features()!!
+                        val selectedPlace = if (features.isNotEmpty()) features.get(0) else null
+
+                        val markerOption = MarkerOptions()
+                                .position(latLng)
+
+                        if (selectedPlace != null) {
+                            // Log.d(TAG, "NOT NULL")
+                            markerOption.title(selectedPlace.placeName())
+                                    .snippet(selectedPlace.address())
+                        }
+
+                        initMarker(markerOption)
+                    }
+
+                    override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) {
+                        Log.e(TAG, "Error: " + t.message)
+                        // Log.d(TAG, call.request().url().uri().toString())
+                    }
+                })
+
+    }
+
     private fun getRoute(origin: Point, destination: Point) {
         // Profile:
         //     driving-traffic
@@ -165,7 +172,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                 .accessToken(Mapbox.getAccessToken())
                 .origin(origin)
                 .destination(destination)
-                .profile("driving-traffic")
+                .profile(transport)
                 .build()
                 .getRoute(object : Callback<DirectionsResponse> {
                     override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
@@ -175,7 +182,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                             return
                         } else if (response.body()!!.routes().isEmpty()) {
                             Log.e(TAG, "No routes found")
-                            Toast.makeText(this, "No routes found", Toast.LENGTH_SHORT)
+                            Toast.makeText(this@MainActivity, "No routes found", Toast.LENGTH_SHORT).show()
                             return
                         }
 
@@ -199,7 +206,6 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
     private fun initMarker(markerOptions: MarkerOptions) {
         if (destinationMarker != null)
             mapboxMap.removeMarker(destinationMarker!!)
-
         destinationMarker = mapboxMap.addMarker(markerOptions)
 
         destinationPosition = Point.fromLngLat(markerOptions.position.longitude, markerOptions.position.latitude)
@@ -324,6 +330,46 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         mapView.onSaveInstanceState(outState)
     }
 
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_transportation, menu!!)
+        menuView = menu
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem?): Boolean {
+        menuView.findItem(R.id.traffic).setIcon(R.drawable.ic_traffic_black_24dp)
+        menuView.findItem(R.id.car).setIcon(R.drawable.ic_directions_car_black_24dp)
+        menuView.findItem(R.id.motorcycle).setIcon(R.drawable.ic_motorcycle_black_24dp)
+        menuView.findItem(R.id.walking).setIcon(R.drawable.ic_directions_walk_black_24dp)
+
+        when(item!!.itemId){
+            R.id.traffic -> {
+                transport = "driving-traffic"
+                item.setIcon(R.drawable.ic_traffic_white_24dp)
+            }
+
+            R.id.car -> {
+                transport = "driving"
+                item.setIcon(R.drawable.ic_directions_car_white_24dp)
+            }
+
+            R.id.motorcycle -> {
+                transport = "cycling"
+                item.setIcon(R.drawable.ic_motorcycle_white_24dp)
+            }
+
+            R.id.walking -> {
+                transport = "walking"
+                item.setIcon(R.drawable.ic_directions_walk_white_24dp)
+            }
+        }
+
+        if (originPosition != null && destinationPosition != null)
+            getRoute(originPosition!!, destinationPosition!!)
+
+        return true
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == Activity.RESULT_OK && requestCode == REQUEST_CODE_AUTOCOMPLETE) {
@@ -347,15 +393,17 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
     }
 
     override fun onBackPressed() {
-        if (destinationMarker != null){
+        if (destinationMarker != null) {
             mapboxMap.removeMarker(destinationMarker!!)
+            destinationMarker = null
             if (navigationMapRoute != null) {
                 navigationMapRoute!!.removeRoute()
             }
-            destinationMarker = null
-            Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT)
-        }
-        else {
+            if (btnStartNavigation.isEnabled)
+                btnStartNavigation.isEnabled = false
+
+            Toast.makeText(this@MainActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
+        } else {
             super.onBackPressed()
             this.finish()
         }
