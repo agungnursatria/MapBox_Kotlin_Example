@@ -54,7 +54,7 @@
         mapbox:mapbox_cameraTargetLng="107.6171586"
         mapbox:mapbox_cameraZoom="20.0"
         mapbox:mapbox_cameraZoomMin="12"
-        mapbox:mapbox_styleUrl="mapbox://styles/mapbox/outdoors-v9" />
+        mapbox:mapbox_styleUrl="@string/mapbox_style_dark" />
 
 
     <ProgressBar
