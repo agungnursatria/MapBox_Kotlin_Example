@@ -4,6 +4,7 @@ package com.anb.mapbox_test
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.location.Location
@@ -13,6 +14,7 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import com.mapbox.android.core.location.LocationEngine
 import com.mapbox.android.core.location.LocationEngineListener
@@ -32,6 +34,7 @@ import com.mapbox.mapboxsdk.camera.CameraPosition
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory
 import com.mapbox.mapboxsdk.geometry.LatLng
 import com.mapbox.mapboxsdk.maps.MapboxMap
+import com.mapbox.mapboxsdk.offline.*
 import com.mapbox.mapboxsdk.plugins.locationlayer.LocationLayerPlugin
 import com.mapbox.mapboxsdk.plugins.locationlayer.modes.RenderMode
 import com.mapbox.mapboxsdk.plugins.places.autocomplete.PlaceAutocomplete
@@ -41,13 +44,16 @@ import com.mapbox.services.android.navigation.ui.v5.NavigationLauncherOptions
 import com.mapbox.services.android.navigation.ui.v5.route.NavigationMapRoute
 import com.mapbox.services.android.navigation.v5.navigation.NavigationRoute
 import kotlinx.android.synthetic.main.activity_main.*
+import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.nio.charset.Charset
+import java.util.*
 
 class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsListener, View.OnClickListener {
 
-    private val TAG = "BUGG"
+    private val TAG = "MainActivity"
     private val REQUEST_CODE_AUTOCOMPLETE = 1
     private var transport = "driving-traffic"
     private lateinit var menuView: Menu
@@ -65,25 +71,36 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
     private var destinationPosition: Point? = null
     private var navigationMapRoute: NavigationMapRoute? = null
 
+    // Offline Map
+    // JSON encoding/decoding
+    private val JSON_FIELD_REGION_NAME = "FIELD_REGION_NAME"
+    private var isEndNotified: Boolean = false
+    private var regionSelected: Int = 0
+    private var offlineManager: OfflineManager? = null
+    private var offlineRegionDownloaded : OfflineRegion? = null
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        setTitle("")
+        title = ""
         Mapbox.getInstance(this, getString(R.string.key_map))
         mapView.apply {
             onCreate(savedInstanceState)
             getMapAsync({
                 mapboxMap = it
+                offlineManager = OfflineManager.getInstance(this@MainActivity)
                 enableLocationPlugin()
 
                 originCoord = LatLng(originLocation?.latitude!!, originLocation?.longitude!!)
                 mapboxMap.addOnMapClickListener {
-                    reverseGeocodingMarker(it)
+                    initMarker(it)
                 }
 
                 btnFindPlace.setOnClickListener(this@MainActivity)
                 btnStartNavigation.setOnClickListener(this@MainActivity)
+                btnDownload.setOnClickListener(this@MainActivity)
+                btnOfflineList.setOnClickListener(this@MainActivity)
             })
         }
     }
@@ -91,33 +108,295 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
     override fun onClick(v: View?) {
         when (v?.id) {
             R.id.btnFindPlace -> {
-                val intent = PlaceAutocomplete.IntentBuilder()
-                        .accessToken(Mapbox.getAccessToken())
-                        .placeOptions(
-                                PlaceOptions.builder()
-                                        .backgroundColor(Color.parseColor("#EEEEEE"))
-                                        .limit(10)
-                                        .hint("Places of Interest")
-                                        .geocodingTypes(GeocodingCriteria.TYPE_POI)
-                                        .build(PlaceOptions.MODE_CARDS))
-                        .build(this@MainActivity)
-                startActivityForResult(intent, REQUEST_CODE_AUTOCOMPLETE)
+                findPlace()
             }
             R.id.btnStartNavigation -> {
-                val option = NavigationLauncherOptions.builder()
-                        .origin(originPosition)
-                        .destination(destinationPosition)
-                        .directionsProfile("driving-traffic")
-                        .enableOffRouteDetection(true)
-                        .build()
-
-                NavigationLauncher.startNavigation(this@MainActivity, option)
+                startNavigation()
+            }
+            R.id.btnDownload -> {
+                downloadRegionDialog()
+            }
+            R.id.btnOfflineList -> {
+                downloadRegionList()
             }
         }
 
     }
 
-    private fun reverseGeocodingMarker(latLng: LatLng) {
+    private fun findPlace(){
+        val intent = PlaceAutocomplete.IntentBuilder()
+                .accessToken(Mapbox.getAccessToken())
+                .placeOptions(
+                        PlaceOptions.builder()
+                                .backgroundColor(Color.parseColor("#EEEEEE"))
+                                .limit(10)
+                                .hint("Places of Interest")
+                                .geocodingTypes(GeocodingCriteria.TYPE_POI)
+                                .build(PlaceOptions.MODE_CARDS))
+                .build(this@MainActivity)
+        startActivityForResult(intent, REQUEST_CODE_AUTOCOMPLETE)
+    }
+
+    private fun startNavigation(){
+        if (originPosition != null && destinationPosition != null){
+            val option = NavigationLauncherOptions.builder()
+                    .origin(originPosition)
+                    .destination(destinationPosition)
+                    .directionsProfile("driving-traffic")
+                    .enableOffRouteDetection(true)
+                    .build()
+
+            NavigationLauncher.startNavigation(this@MainActivity, option)
+        }
+    }
+
+    private fun downloadRegionDialog() {
+
+        // Set up download interaction. Display a dialog
+        // when the user clicks download button and require
+        // a user-provided region name
+        val builder = AlertDialog.Builder(this)
+
+        val regionNameEdit = EditText(this)
+        regionNameEdit.hint = "Enter name"
+
+        // Build the dialog box
+        builder.setTitle("Name new region")
+                .setView(regionNameEdit)
+                .setMessage("Downloads the map region you currently are viewing")
+                .setPositiveButton("Download") { _, _ ->
+                    val regionName = regionNameEdit.text.toString()
+                    // Require a region name to begin the download.
+                    // If the user-provided string is empty, display
+                    // a toast message and do not begin download.
+                    if (regionName.isEmpty()) {
+                        Toast.makeText(this@MainActivity, "Region name cannot be empty.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        // Begin download process
+                        downloadRegion(regionName)
+                    }
+                }
+                .setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
+
+        // Display the dialog
+        builder.show()
+    }
+
+    private fun downloadRegion(regionName: String) {
+        // Define offline region parameters, including bounds,
+        // min/max zoom, and metadata
+
+        // Start the progressBar
+        startProgress()
+
+        // Create offline definition using the current
+        // style and boundaries of visible map area
+        val styleUrl = mapboxMap.styleUrl
+        val bounds = mapboxMap.projection.visibleRegion.latLngBounds
+        val minZoom = mapboxMap.cameraPosition.zoom
+        val maxZoom = mapboxMap.maxZoomLevel
+        val pixelRatio = this.resources.displayMetrics.density
+        val definition = OfflineTilePyramidRegionDefinition(
+                styleUrl, bounds, minZoom, maxZoom, pixelRatio)
+
+        // Build a JSONObject using the user-defined offline region title,
+        // convert it into string, and use it to create a metadata variable.
+        // The metadata varaible will later be passed to createOfflineRegion()
+        val metadata: ByteArray? = try {
+            val jsonObject = JSONObject()
+            jsonObject.put(JSON_FIELD_REGION_NAME, regionName)
+            val json = jsonObject.toString()
+            json.toByteArray(Charset.defaultCharset())
+        } catch (exception: Exception) {
+            Log.e(TAG, "Failed to encode metadata: " + exception.message)
+            null
+        }
+
+
+        // Create the offline region and launch the download
+        offlineManager?.createOfflineRegion(definition, metadata!!, object : OfflineManager.CreateOfflineRegionCallback {
+            override fun onCreate(offlineRegion: OfflineRegion) {
+                Log.d(TAG, "Offline region created: $regionName")
+                offlineRegionDownloaded = offlineRegion
+                launchDownload()
+            }
+
+            override fun onError(error: String) {
+                Log.e(TAG, "Error: $error")
+            }
+        })
+    }
+
+    private fun launchDownload() {
+        // Set up an observer to handle download progress and
+        // notify the user when the region is finished downloading
+        offlineRegionDownloaded?.setObserver(object : OfflineRegion.OfflineRegionObserver {
+            override fun onStatusChanged(status: OfflineRegionStatus) {
+                // Compute a percentage
+                val percentage = if (status.requiredResourceCount >= 0)
+                    100.0 * status.completedResourceCount / status.requiredResourceCount
+                else
+                    0.0
+
+                if (status.isComplete) {
+                    // Download complete
+                    endProgress("Region downloaded successfully.")
+                    return
+                } else if (status.isRequiredResourceCountPrecise) {
+                    // Switch to determinate state
+                    setPercentage(Math.round(percentage).toInt())
+                }
+
+                // Log what is being currently downloaded
+                Log.d(TAG, String.format("%s/%s resources; %s bytes downloaded.",
+                        status.completedResourceCount.toString(),
+                        status.requiredResourceCount.toString(),
+                        status.completedResourceSize.toString()))
+            }
+
+            override fun onError(error: OfflineRegionError) {
+                Log.e(TAG, "onError reason: " + error.reason)
+                Log.e(TAG, "onError message: " + error.message)
+            }
+
+            override fun mapboxTileCountLimitExceeded(limit: Long) {
+                Log.e(TAG, "Mapbox tile count limit exceeded: $limit")
+            }
+        })
+
+        // Change the region state
+        offlineRegionDownloaded?.setDownloadState(OfflineRegion.STATE_ACTIVE)
+    }
+
+    private fun startProgress() {
+        // Start and show the progress bar
+        isEndNotified = false
+        progress_bar.isIndeterminate = true
+        progress_bar.visibility = View.VISIBLE
+    }
+
+    private fun setPercentage(percentage: Int) {
+        progress_bar.isIndeterminate = false
+        progress_bar.progress = percentage
+    }
+
+    private fun endProgress(message: String) {
+        // Don't notify more than once
+        if (isEndNotified) {
+            return
+        }
+
+        // Stop and hide the progress bar
+        isEndNotified = true
+        progress_bar.isIndeterminate = false
+        progress_bar.visibility = View.GONE
+
+        // Show a toast
+        Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun downloadRegionList() {
+        // Build a region list when the user clicks the list button
+
+        // Reset the region selected int to 0
+        regionSelected = 0
+
+        // Query the DB asynchronously
+        offlineManager?.listOfflineRegions(object : OfflineManager.ListOfflineRegionsCallback {
+            override fun onList(offlineRegions: Array<out OfflineRegion>?) {
+                // Check result. If no regions have been
+                // downloaded yet, notify user and return
+                if (offlineRegions == null || offlineRegions.isEmpty()) {
+                    Toast.makeText(this@MainActivity, "You have no regions yet.", Toast.LENGTH_SHORT).show()
+                    return
+                }
+
+                // Add all of the region names to a list
+                val offlineRegionsNames = ArrayList<String>()
+                for (offlineRegion in offlineRegions) {
+                    offlineRegionsNames.add(getRegionName(offlineRegion))
+                }
+                val items = offlineRegionsNames.toTypedArray<CharSequence>()
+
+                // Build a dialog containing the list of regions
+                val dialog = AlertDialog.Builder(this@MainActivity)
+                        .setTitle("List")
+                        .setSingleChoiceItems(items, 0) { _, which ->
+                            // Track which region the user selects
+                            regionSelected = which
+                        }
+                        .setPositiveButton("Navigate to") { _, _ ->
+                            Toast.makeText(this@MainActivity, items[regionSelected], Toast.LENGTH_LONG).show()
+
+                            // Get the region bounds and zoom
+                            val bounds = (offlineRegions[regionSelected].definition as OfflineTilePyramidRegionDefinition).bounds
+                            val regionZoom = (offlineRegions[regionSelected].definition as OfflineTilePyramidRegionDefinition).minZoom
+
+                            // Create new camera position
+                            val cameraPosition = CameraPosition.Builder()
+                                    .target(bounds.center)
+                                    .zoom(regionZoom)
+                                    .build()
+
+                            // Move camera to new position
+                            mapboxMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+                        }
+                        .setNeutralButton("Delete") { _, _ ->
+                            // Make progressBar indeterminate and
+                            // set it to visible to signal that
+                            // the deletion process has begun
+                            progress_bar.isIndeterminate = true
+                            progress_bar.visibility = View.VISIBLE
+
+                            // Begin the deletion process
+                            offlineRegions[regionSelected].delete(object : OfflineRegion.OfflineRegionDeleteCallback {
+                                override fun onDelete() {
+                                    // Once the region is deleted, remove the
+                                    // progressBar and display a toast
+                                    progress_bar.visibility = View.INVISIBLE
+                                    progress_bar.isIndeterminate = false
+                                    Toast.makeText(this@MainActivity, "Region deleted", Toast.LENGTH_LONG).show()
+                                }
+
+                                override fun onError(error: String) {
+                                    progress_bar.visibility = View.INVISIBLE
+                                    progress_bar.isIndeterminate = false
+                                    Log.e(TAG, "Error: $error")
+                                }
+                            })
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            // When the user cancels, don't do anything.
+                            // The dialog will automatically close
+                        }.create()
+                dialog.show()
+
+            }
+
+            override fun onError(error: String) {
+                Log.e(TAG, "Error: $error")
+            }
+
+        })
+    }
+
+    private fun getRegionName(offlineRegion: OfflineRegion): String {
+        // Get the retion name from the offline region metadata
+        val regionName: String =
+                try {
+                    val metadata = offlineRegion.metadata
+                    val json = metadata.toString(Charset.defaultCharset())
+                    val jsonObject = JSONObject(json)
+                    jsonObject.getString(JSON_FIELD_REGION_NAME)
+                } catch (exception: Exception) {
+                    Log.e(TAG, "Failed to decode metadata: " + exception.message)
+                    "Region " + offlineRegion.id
+                }
+
+        return regionName
+    }
+
+    private fun initMarker(latLng: LatLng) {
 
         val point: Point = Point.fromLngLat(latLng.longitude, latLng.latitude)
         MapboxGeocoding.builder()
@@ -131,7 +410,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                         // Log.d(TAG, call.request().url().uri().toString())
                         // Log.d(TAG, response.body()?.toJson())
                         val features = response.body()?.features()!!
-                        val selectedPlace = if (features.isNotEmpty()) features.get(0) else null
+                        val selectedPlace = if (features.isNotEmpty()) features[0] else null
 
                         val markerOption = MarkerOptions()
                                 .position(latLng)
@@ -142,7 +421,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                                     .snippet(selectedPlace.address())
                         }
 
-                        initMarker(markerOption)
+                        setMarkerAndRoute(markerOption)
                     }
 
                     override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) {
@@ -203,7 +482,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                 })
     }
 
-    private fun initMarker(markerOptions: MarkerOptions) {
+    private fun setMarkerAndRoute(markerOptions: MarkerOptions) {
         if (destinationMarker != null)
             mapboxMap.removeMarker(destinationMarker!!)
         destinationMarker = mapboxMap.addMarker(markerOptions)
@@ -212,8 +491,6 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         originPosition = Point.fromLngLat(originCoord!!.longitude, originCoord!!.latitude)
         getRoute(originPosition!!, destinationPosition!!)
 
-        if (!btnStartNavigation.isEnabled)
-            btnStartNavigation.isEnabled = true
     }
 
     private fun enableLocationPlugin() {
@@ -342,7 +619,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         menuView.findItem(R.id.motorcycle).setIcon(R.drawable.ic_motorcycle_black_24dp)
         menuView.findItem(R.id.walking).setIcon(R.drawable.ic_directions_walk_black_24dp)
 
-        when(item!!.itemId){
+        when (item!!.itemId) {
             R.id.traffic -> {
                 transport = "driving-traffic"
                 item.setIcon(R.drawable.ic_traffic_white_24dp)
@@ -387,7 +664,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
                     .title(placeName)
                     .snippet(address)
 
-            initMarker(markerOptions)
+            setMarkerAndRoute(markerOptions)
             moveCamera(coordinate)
         }
     }
@@ -399,8 +676,6 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
             if (navigationMapRoute != null) {
                 navigationMapRoute!!.removeRoute()
             }
-            if (btnStartNavigation.isEnabled)
-                btnStartNavigation.isEnabled = false
 
             Toast.makeText(this@MainActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
         } else {

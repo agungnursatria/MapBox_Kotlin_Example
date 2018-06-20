@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">MapBox-Test</string>
-    <string name="key_map">pk.eyJ1IjoiYWd1bmdudXJzYXRyaWEiLCJhIjoiY2ppNDVnMTlxMDVydzN3cDZ2cWpmaTA5YyJ9.oxpJznmSB1c6wXWzlofFGA</string>
+    <string name="key_map">pk.eyJ1IjoiYWd1bmdudXJzYXRyaWEiLCJhIjoiY2ppbWw1c2FtMDR2aTNrbXA0enMxNGlybiJ9.9ufcK2pyi03-VLMC8CLa9Q</string>
     <string name="start_navigation">Start Navigation</string>
     <string name="find_places">Find Places</string>
+    <string name="offline_map">Offline Map</string>
 </resources>

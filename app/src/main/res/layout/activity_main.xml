@@ -11,9 +11,27 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
-        android:layout_marginLeft="8dp"
+        android:layout_marginStart="8dp"
         android:layout_marginTop="12dp"
-        android:text="@string/find_places" />
+        android:text="@string/find_places"
+        tools:ignore="RelativeOverlap" />
+
+    <Button
+        android:id="@+id/btnDownload"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_alignTop="@+id/btnFindPlace"
+        android:layout_toEndOf="@+id/btnFindPlace"
+        android:drawableStart="@drawable/ic_file_download_black_24dp"
+        android:text="" />
+
+    <Button
+        android:id="@+id/btnOfflineList"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/btnStartNavigation"
+        android:layout_alignEnd="@+id/btnStartNavigation"
+        android:text="@string/offline_map" />
 
     <Button
         android:id="@+id/btnStartNavigation"
@@ -24,8 +42,7 @@
         android:layout_marginBottom="12dp"
         android:layout_marginLeft="16dp"
         android:layout_marginRight="16dp"
-        android:text="@string/start_navigation"
-        android:enabled="false"/>
+        android:text="@string/start_navigation"/>
 
     <com.mapbox.mapboxsdk.maps.MapView
         android:id="@+id/mapView"
@@ -33,11 +50,22 @@
         android:layout_height="match_parent"
         android:layout_alignParentStart="true"
         android:layout_alignParentTop="true"
-        mapbox:mapbox_cameraTargetLat="-6.8901086"
-        mapbox:mapbox_cameraTargetLng="-77.0295"
+        mapbox:mapbox_cameraTargetLat="-6.8904003"
+        mapbox:mapbox_cameraTargetLng="107.6171586"
         mapbox:mapbox_cameraZoom="20.0"
-        mapbox:mapbox_styleUrl="@string/mapbox_style_dark">
+        mapbox:mapbox_cameraZoomMin="12"
+        mapbox:mapbox_styleUrl="mapbox://styles/mapbox/outdoors-v9" />
 
-    </com.mapbox.mapboxsdk.maps.MapView>
+
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="25dp"
+        android:layout_centerHorizontal="true"
+        android:layout_centerInParent="true"
+        android:paddingLeft="25dp"
+        android:paddingRight="25dp"
+        android:visibility="gone"/>
 
 </RelativeLayout>
