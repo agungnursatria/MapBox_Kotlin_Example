@@ -16,14 +16,14 @@
         android:text="@string/find_places"
         tools:ignore="RelativeOverlap" />
 
-    <ImageButton
+    <Button
         android:id="@+id/btnDownload"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_alignTop="@+id/btnFindPlace"
         android:layout_toEndOf="@+id/btnFindPlace"
-        android:src="@drawable/ic_file_download_black_24dp"
-        android:contentDescription="@string/download" />
+        android:drawableStart="@drawable/ic_file_download_black_24dp"
+        android:text="" />
 
     <Button
         android:id="@+id/btnOfflineList"
