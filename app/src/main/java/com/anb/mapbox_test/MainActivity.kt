@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         title = ""
-        Mapbox.getInstance(this, getString(R.string.key_map))
+        Mapbox.getInstance(this@MainActivity, getString(R.string.key_map))
         mapView.apply {
             onCreate(savedInstanceState)
             getMapAsync({
@@ -155,9 +155,9 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         // Set up download interaction. Display a dialog
         // when the user clicks download button and require
         // a user-provided region name
-        val builder = AlertDialog.Builder(this)
+        val builder = AlertDialog.Builder(this@MainActivity)
 
-        val regionNameEdit = EditText(this)
+        val regionNameEdit = EditText(this@MainActivity)
         regionNameEdit.hint = "Enter name"
 
         // Build the dialog box
@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         val bounds = mapboxMap.projection.visibleRegion.latLngBounds
         val minZoom = mapboxMap.cameraPosition.zoom
         val maxZoom = mapboxMap.maxZoomLevel
-        val pixelRatio = this.resources.displayMetrics.density
+        val pixelRatio = this@MainActivity.resources.displayMetrics.density
         val definition = OfflineTilePyramidRegionDefinition(
                 styleUrl, bounds, minZoom, maxZoom, pixelRatio)
 
@@ -495,21 +495,21 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
 
     private fun enableLocationPlugin() {
         // Check if permissions are enabled and if not request
-        if (PermissionsManager.areLocationPermissionsGranted(this)) {
+        if (PermissionsManager.areLocationPermissionsGranted(this@MainActivity)) {
             // Create a location engine instance
             initializeLocationEngine()
 
             locationPlugin = LocationLayerPlugin(mapView, mapboxMap, locationEngine)
             locationPlugin!!.renderMode = RenderMode.COMPASS
         } else {
-            permissionsManager = PermissionsManager(this)
-            permissionsManager.requestLocationPermissions(this)
+            permissionsManager = PermissionsManager(this@MainActivity)
+            permissionsManager.requestLocationPermissions(this@MainActivity)
         }
     }
 
     @SuppressLint("MissingPermission")
     private fun initializeLocationEngine() {
-        locationEngine = LocationEngineProvider(this).obtainBestLocationEngineAvailable()
+        locationEngine = LocationEngineProvider(this@MainActivity).obtainBestLocationEngineAvailable()
         locationEngine!!.priority = LocationEnginePriority.HIGH_ACCURACY
         locationEngine!!.activate()
 
@@ -518,7 +518,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
             originLocation = lastLocation
             setCameraPosition(lastLocation)
         } else {
-            locationEngine!!.addLocationEngineListener(this)
+            locationEngine!!.addLocationEngineListener(this@MainActivity)
         }
     }
 
@@ -545,7 +545,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
         if (location != null) {
             originLocation = location
             setCameraPosition(location)
-            locationEngine?.removeLocationEngineListener(this)
+            locationEngine?.removeLocationEngineListener(this@MainActivity)
         }
     }
 
