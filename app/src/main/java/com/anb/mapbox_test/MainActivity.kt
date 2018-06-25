@@ -142,7 +142,7 @@ class MainActivity : AppCompatActivity(), LocationEngineListener, PermissionsLis
             val option = NavigationLauncherOptions.builder()
                     .origin(originPosition)
                     .destination(destinationPosition)
-                    .directionsProfile("driving-traffic")
+                    .directionsProfile(transport)
                     .enableOffRouteDetection(true)
                     .build()
 
